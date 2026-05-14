@@ -1,0 +1,26 @@
+@"
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.log
+
+uploads/
+outputs/
+data/
+tmp/
+temp/
+
+*.pt
+*.pth
+*.bin
+*.onnx
+*.dll
+*.exe
+*.zip
+*.rar
+
+.vscode/
+.idea/
+"@ | Set-Content .gitignore -Encoding UTF8

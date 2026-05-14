@@ -1,0 +1,14 @@
+{
+  "id": "dat261303/debug-cutlines-auto",
+  "title": "debug-cutlines-auto",
+  "code_file": "script.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "dat261303/kaggle-pack"
+  ],
+  "competition_sources": []
+}
