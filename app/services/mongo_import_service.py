@@ -153,6 +153,7 @@ def _topic_docs(book_stem: str, bundle_path: Path, manifest: dict[str, Any], sub
             {
                 "topic_num": topic_num,
                 "topic_name": topic_name,
+                "topic_category": "document",
                 "subject_id": subject_id,
                 "import_key": f"topic:{book_stem}:{topic_num}",
                 "pdf_path": str(merged.get("pdf") or merged.get("pdf_path") or _find_pdf_sibling(json_path) or ""),
@@ -184,6 +185,7 @@ def _lesson_docs(book_stem: str, bundle_path: Path, manifest: dict[str, Any], to
             {
                 "lesson_num": lesson_num,
                 "lesson_name": lesson_name,
+                "lesson_category": "document",
                 "topic_id": topic_ids.get(topic_num),
                 "topic_num": topic_num,
                 "import_key": f"lesson:{book_stem}:{lesson_num}",
@@ -211,6 +213,8 @@ def _chunk_docs(book_stem: str, bundle_path: Path, lesson_ids_by_stem: dict[str,
             {
                 "chunk_num": chunk_num,
                 "chunk_name": meta.get("chunk_name") or title or f"chunk_{int(_num(chunk_num, '1')):02d}",
+                "chunk_category": "document",
+                "chunk_type": meta.get("chunk_type"),
                 "lesson_id": lesson_ids_by_stem.get(lesson_stem) or lesson_ids_by_num.get(lesson_num),
                 "lesson_num": lesson_num,
                 "lesson_stem": lesson_stem,
@@ -374,6 +378,7 @@ def import_bundle_to_mongodb(job_id: str) -> dict[str, Any]:
             subject_key,
             {
                 "subject_name": subject_name,
+                "subject_category": "document",
                 "subject_type": subject_type,
                 "class_id": class_id,
             },

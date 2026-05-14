@@ -198,6 +198,7 @@ def save_lesson_metadata_for_job(job_id: str, lesson: dict[str, Any]) -> dict[st
             {
                 "lesson_num": lesson_num,
                 "lesson_name": lesson_name,
+                "lesson_category": "document",
                 "lesson_type": lesson.get("lesson_type") or lesson_type_from_name(lesson_name),
                 "topic_id": topic["_id"],
                 "asset_prefixes": {

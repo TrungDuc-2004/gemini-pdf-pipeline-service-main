@@ -924,6 +924,24 @@ def approve_lessons(
         "approved_at": approved_at,
     }
     write_json(_workspace_file(job_id, "approved_lessons.json"), payload)
+
+    from app.services.sync_service import sync_metadata
+
+    sync_result = sync_metadata(job_id=job_id, targets=["postgres", "neo4j"], enable_embeddings=False)
+    sync_ok = bool(sync_result.get("ok"))
+    for lesson in all_lessons:
+        num = _topic_num_int(lesson.get("lesson_num"))
+        if num in selected_nums:
+            lesson["postgres_synced"] = sync_ok and not any(err.get("target") == "postgres" for err in sync_result.get("errors", []))
+            lesson["neo4j_synced"] = sync_ok and not any(err.get("target") == "neo4j" for err in sync_result.get("errors", []))
+            if not sync_ok:
+                lesson["sync_error"] = sync_result.get("errors")
+    payload["lessons"] = all_lessons
+    payload["grouped_by_topic"] = _group_lessons(all_lessons)
+    payload["sync_result"] = sync_result
+    payload["sync_ok"] = sync_ok
+    write_json(_workspace_file(job_id, "approved_lessons.json"), payload)
+
     update_job_state(job_id, status=JobStatus.reviewing_lessons, stage="reviewing_lessons")
     update_result(
         job_id,

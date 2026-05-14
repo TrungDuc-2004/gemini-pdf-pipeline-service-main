@@ -587,6 +587,7 @@ def import_bundle_to_metadata_edu(
             f"subject/{g_slug}/{s_slug}",
             {
                 "subject_name": subject_name,
+                "subject_category": "document",
                 "subject_type": subject_type,
                 "bucket_name": bucket,
                 "class_id": class_id,
@@ -621,6 +622,7 @@ def import_bundle_to_metadata_edu(
                 {
                     "topic_num": topic["topic_num"],
                     "topic_name": topic["topic_name"],
+                    "topic_category": "document",
                     "subject_id": subject_id,
                     "asset_prefixes": _asset_prefixes(prefix),
                 },
@@ -655,6 +657,7 @@ def import_bundle_to_metadata_edu(
                 {
                     "lesson_num": lesson["lesson_num"],
                     "lesson_name": lesson["lesson_name"],
+                    "lesson_category": "document",
                     "lesson_type": lesson["lesson_type"],
                     "topic_id": topic_ids.get(topic_num),
                     "asset_prefixes": _asset_prefixes(prefix),
@@ -693,6 +696,8 @@ def import_bundle_to_metadata_edu(
                 {
                     "chunk_num": chunk["chunk_num"],
                     "chunk_name": chunk["chunk_name"],
+                    "chunk_category": "document",
+                    "chunk_type": chunk.get("chunk_type"),
                     "lesson_id": lesson_ids.get(lesson_num),
                     "asset_prefixes": _asset_prefixes(prefix),
                 },

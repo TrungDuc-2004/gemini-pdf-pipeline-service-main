@@ -26,12 +26,17 @@ from app.services.neo4j_service import (
 from app.services.postgres_service import ensure_postgres_schema, postgres_session
 from app.utils.time import utc_now_iso
 
-CORE_ORDER = ["class", "subject", "topic", "lesson", "chunk", "keyword", "keyword_alias", "chunk_keyword", "topic_bag", "asset", "import_job"]
+CORE_ORDER = ["class", "subject", "topic", "lesson", "chunk", "keyword", "keyword_alias", "chunk_keyword", "topic_bag", "import_job"]
 ACTIVE_FILTER = {"is_deleted": {"$ne": True}}
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _category(value: Any, default: str = "document") -> str:
+    text = str(value or default).strip().lower()
+    return text if text in {"document", "image", "video"} else default
 
 
 def _object_id_class():
@@ -198,9 +203,9 @@ def _sync_subject_pg(db: Any, session: Session, doc: dict[str, Any]) -> str:
         {
             "class_id": class_id,
             "subject_name": str(doc.get("subject_name") or doc.get("name") or "").strip(),
+            "subject_category": _category(doc.get("subject_category") or doc.get("category")),
             "subject_type": str(doc.get("subject_type") or doc.get("type") or "").strip() or None,
             "bucket_name": doc.get("bucket_name"),
-            "asset_prefixes": _jsonable(doc.get("asset_prefixes")),
             "mongo_id": _oid(doc.get("_id")),
             "import_key": doc.get("import_key"),
             "is_deleted": bool(doc.get("is_deleted", False)),
@@ -230,7 +235,7 @@ def _sync_topic_pg(db: Any, session: Session, doc: dict[str, Any]) -> str:
             "subject_id": subject_id,
             "topic_num": int(doc.get("topic_num") or 0),
             "topic_name": str(doc.get("topic_name") or doc.get("name") or "").strip(),
-            "asset_prefixes": _jsonable(doc.get("asset_prefixes")),
+            "topic_category": _category(doc.get("topic_category") or doc.get("category")),
             "mongo_id": _oid(doc.get("_id")),
             "import_key": doc.get("import_key"),
             "is_deleted": bool(doc.get("is_deleted", False)),
@@ -260,8 +265,8 @@ def _sync_lesson_pg(db: Any, session: Session, doc: dict[str, Any]) -> str:
             "topic_id": topic_id,
             "lesson_num": int(doc.get("lesson_num") or 0),
             "lesson_name": str(doc.get("lesson_name") or doc.get("name") or "").strip(),
+            "lesson_category": _category(doc.get("lesson_category") or doc.get("category")),
             "lesson_type": doc.get("lesson_type"),
-            "asset_prefixes": _jsonable(doc.get("asset_prefixes")),
             "mongo_id": _oid(doc.get("_id")),
             "import_key": doc.get("import_key"),
             "is_deleted": bool(doc.get("is_deleted", False)),
@@ -291,7 +296,8 @@ def _sync_chunk_pg(db: Any, session: Session, doc: dict[str, Any]) -> str:
             "lesson_id": lesson_id,
             "chunk_num": int(doc.get("chunk_num") or 0),
             "chunk_name": str(doc.get("chunk_name") or doc.get("name") or "").strip(),
-            "asset_prefixes": _jsonable(doc.get("asset_prefixes")),
+            "chunk_category": _category(doc.get("chunk_category") or doc.get("category")),
+            "chunk_type": doc.get("chunk_type"),
             "mongo_id": _oid(doc.get("_id")),
             "import_key": doc.get("import_key"),
             "is_deleted": bool(doc.get("is_deleted", False)),
@@ -394,6 +400,7 @@ def sync_chunk_to_neo4j(
                     "subject_id": subject.subject_id,
                     "class_id": subject.class_id,
                     "subject_name": subject.subject_name,
+                    "subject_category": getattr(subject, "subject_category", "document"),
                     "subject_type": subject.subject_type,
                     "mongo_id": subject.mongo_id,
                     "import_key": subject.import_key,
@@ -408,6 +415,7 @@ def sync_chunk_to_neo4j(
                     "subject_id": topic.subject_id,
                     "topic_num": topic.topic_num,
                     "topic_name": topic.topic_name,
+                    "topic_category": getattr(topic, "topic_category", "document"),
                     "mongo_id": topic.mongo_id,
                     "import_key": topic.import_key,
                     "embedding": embedding.embedding if embedding else None,
@@ -424,6 +432,7 @@ def sync_chunk_to_neo4j(
                     "topic_id": lesson.topic_id,
                     "lesson_num": lesson.lesson_num,
                     "lesson_name": lesson.lesson_name,
+                    "lesson_category": getattr(lesson, "lesson_category", "document"),
                     "lesson_type": lesson.lesson_type,
                     "mongo_id": lesson.mongo_id,
                     "import_key": lesson.import_key,
@@ -438,6 +447,8 @@ def sync_chunk_to_neo4j(
                     "lesson_id": chunk.lesson_id,
                     "chunk_num": chunk.chunk_num,
                     "chunk_name": chunk.chunk_name,
+                    "chunk_category": getattr(chunk, "chunk_category", "document"),
+                    "chunk_type": getattr(chunk, "chunk_type", None),
                     "mongo_id": chunk.mongo_id,
                     "import_key": chunk.import_key,
                 },
@@ -475,8 +486,10 @@ def _sync_keyword_pg(session: Session, doc: dict[str, Any]) -> str:
         {
             "keyword_name": str(doc.get("keyword_name") or doc.get("name") or "").strip(),
             "keyword_slug": str(doc.get("keyword_slug") or _slugify(doc.get("keyword_name"))).strip(),
+            "chunk_id": doc.get("chunk_id"),
+            "keyword_embedding": _jsonable(doc.get("keyword_embedding")),
+            "embedding_provider": doc.get("embedding_provider"),
             "aliases": _jsonable(doc.get("aliases")),
-            "asset_prefixes": _jsonable(doc.get("asset_prefixes")),
             "mongo_id": _oid(doc.get("_id")),
             "import_key": doc.get("import_key"),
             "is_deleted": bool(doc.get("is_deleted", False)),
@@ -568,37 +581,6 @@ def _sync_topic_bag_pg(db: Any, session: Session, doc: dict[str, Any]) -> str:
     return bag_id
 
 
-def _sync_asset_pg(session: Session, doc: dict[str, Any], owner_id_map: dict[tuple[str, str], str]) -> str:
-    owner_type = str(doc.get("owner_type") or "").strip()
-    owner_mongo_id = _oid(doc.get("owner_id"))
-    owner_id = owner_id_map.get((owner_type, owner_mongo_id or ""))
-    asset_id = _stable_id("asset", doc, doc.get("object_key"))
-    _upsert_by_pk(
-        session,
-        pgm.Asset,
-        "asset_id",
-        asset_id,
-        {
-            "owner_type": owner_type,
-            "owner_id": owner_id,
-            "asset_type": doc.get("asset_type"),
-            "bucket": doc.get("bucket"),
-            "path_prefix": doc.get("path_prefix"),
-            "object_key": str(doc.get("object_key") or "").strip(),
-            "file_name": doc.get("file_name"),
-            "url": doc.get("url"),
-            "content_type": doc.get("content_type"),
-            "size": doc.get("size"),
-            "mongo_id": _oid(doc.get("_id")),
-            "import_key": doc.get("import_key"),
-            "is_deleted": bool(doc.get("is_deleted", False)),
-            "created_at": doc.get("created_at"),
-            "updated_at": doc.get("updated_at"),
-        },
-    )
-    return asset_id
-
-
 def _sync_import_job_pg(session: Session, doc: dict[str, Any]) -> str:
     import_job_id = _stable_id("import_job", doc, doc.get("job_id"))
     _upsert_by_pk(
@@ -624,22 +606,6 @@ def _sync_import_job_pg(session: Session, doc: dict[str, Any]) -> str:
         },
     )
     return import_job_id
-
-
-def _build_owner_id_map(session: Session) -> dict[tuple[str, str], str]:
-    mapping: dict[tuple[str, str], str] = {}
-    specs = [
-        ("subject", pgm.Subject, "subject_id"),
-        ("topic", pgm.Topic, "topic_id"),
-        ("lesson", pgm.Lesson, "lesson_id"),
-        ("chunk", pgm.Chunk, "chunk_id"),
-    ]
-    for owner_type, model, id_attr in specs:
-        rows = session.execute(select(model)).scalars().all()
-        for row in rows:
-            if getattr(row, "mongo_id", None):
-                mapping[(owner_type, str(row.mongo_id))] = getattr(row, id_attr)
-    return mapping
 
 
 def _topic_embedding_text(db: Any, topic_doc: dict[str, Any]) -> str:
@@ -769,14 +735,6 @@ def sync_mongo_to_postgres(
                 counts["topic_bag_count"] += 1
             session.commit()
 
-            owner_id_map = _build_owner_id_map(session)
-            for doc in _active_docs(db, "asset"):
-                active_mongo_ids["asset"].add(_oid(doc.get("_id")) or "")
-                if not doc.get("object_key"):
-                    continue
-                _sync_asset_pg(session, doc, owner_id_map)
-                counts["asset_count"] += 1
-            session.commit()
 
             for doc in _active_docs(db, "import_job"):
                 active_mongo_ids["import_job"].add(_oid(doc.get("_id")) or "")
@@ -787,7 +745,6 @@ def sync_mongo_to_postgres(
             if prune_missing:
                 # Child-first pruning to satisfy FK constraints.
                 prune_specs = [
-                    (pgm.Asset, "asset"),
                     (pgm.TopicBag, "topic_bag"),
                     (pgm.KeywordAlias, "keyword_alias"),
                     (pgm.Keyword, "keyword"),
@@ -885,6 +842,7 @@ def sync_postgres_to_neo4j(*, create_schema: bool = True, rebuild_neo4j: bool = 
                         "subject_id": row.subject_id,
                         "class_id": row.class_id,
                         "subject_name": row.subject_name,
+                        "subject_category": getattr(row, "subject_category", "document"),
                         "subject_type": row.subject_type,
                         "mongo_id": row.mongo_id,
                         "import_key": row.import_key,
@@ -901,6 +859,7 @@ def sync_postgres_to_neo4j(*, create_schema: bool = True, rebuild_neo4j: bool = 
                         "subject_id": row.subject_id,
                         "topic_num": row.topic_num,
                         "topic_name": row.topic_name,
+                        "topic_category": getattr(row, "topic_category", "document"),
                         "mongo_id": row.mongo_id,
                         "import_key": row.import_key,
                         "embedding": embedding.embedding if embedding else None,
@@ -918,6 +877,7 @@ def sync_postgres_to_neo4j(*, create_schema: bool = True, rebuild_neo4j: bool = 
                         "topic_id": row.topic_id,
                         "lesson_num": row.lesson_num,
                         "lesson_name": row.lesson_name,
+                        "lesson_category": getattr(row, "lesson_category", "document"),
                         "lesson_type": row.lesson_type,
                         "mongo_id": row.mongo_id,
                         "import_key": row.import_key,
@@ -933,6 +893,8 @@ def sync_postgres_to_neo4j(*, create_schema: bool = True, rebuild_neo4j: bool = 
                         "lesson_id": row.lesson_id,
                         "chunk_num": row.chunk_num,
                         "chunk_name": row.chunk_name,
+                        "chunk_category": getattr(row, "chunk_category", "document"),
+                        "chunk_type": getattr(row, "chunk_type", None),
                         "mongo_id": row.mongo_id,
                         "import_key": row.import_key,
                     },

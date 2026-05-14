@@ -580,6 +580,23 @@ def approve_topics(
         pending_nums=pending_nums,
         topic_assets=topic_assets,
     )
+
+    from app.services.sync_service import sync_metadata
+
+    sync_result = sync_metadata(job_id=job_id, targets=["postgres", "neo4j"], enable_embeddings=False)
+    sync_ok = bool(sync_result.get("ok"))
+    for topic in all_topics:
+        num = _topic_num_int(topic.get("topic_num"))
+        if num in selected_nums:
+            topic["postgres_synced"] = sync_ok and not any(err.get("target") == "postgres" for err in sync_result.get("errors", []))
+            topic["neo4j_synced"] = sync_ok and not any(err.get("target") == "neo4j" for err in sync_result.get("errors", []))
+            if not sync_ok:
+                topic["sync_error"] = sync_result.get("errors")
+    payload["topics"] = all_topics
+    payload["sync_result"] = sync_result
+    payload["sync_ok"] = sync_ok
+    write_json(_workspace_file(job_id, "approved_topics.json"), payload)
+
     if approved_all:
         message = "Đã duyệt toàn bộ chủ đề. Có thể trích xuất bài học."
     elif len(selected_nums) == 1:

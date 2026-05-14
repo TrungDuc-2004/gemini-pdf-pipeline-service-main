@@ -199,6 +199,7 @@ def save_topic_metadata_for_job(job_id: str, topic: dict[str, Any]) -> dict[str,
             f"subject/{g_slug}/{s_slug}",
             {
                 "subject_name": subject_name,
+                "subject_category": "document",
                 "subject_type": subject_type,
                 "bucket_name": bucket,
                 "class_id": class_id,
@@ -214,6 +215,7 @@ def save_topic_metadata_for_job(job_id: str, topic: dict[str, Any]) -> dict[str,
             {
                 "topic_num": topic_num,
                 "topic_name": topic_name,
+                "topic_category": "document",
                 "subject_id": subject_id,
                 "asset_prefixes": {
                     "documents": prefix,

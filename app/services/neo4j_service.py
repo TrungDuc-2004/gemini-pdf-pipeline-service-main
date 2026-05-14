@@ -41,13 +41,13 @@ def neo4j_session() -> Iterator[Session]:
 def ensure_neo4j_schema(*, enable_topic_vector_index: bool = True) -> None:
     with neo4j_session() as session:
         statements = [
-            "CREATE CONSTRAINT thing_id IF NOT EXISTS FOR (n:Thing) REQUIRE n.id IS UNIQUE",
-            "CREATE CONSTRAINT class_id IF NOT EXISTS FOR (n:Class) REQUIRE n.class_id IS UNIQUE",
-            "CREATE CONSTRAINT subject_id IF NOT EXISTS FOR (n:Subject) REQUIRE n.subject_id IS UNIQUE",
-            "CREATE CONSTRAINT topic_id IF NOT EXISTS FOR (n:Topic) REQUIRE n.topic_id IS UNIQUE",
-            "CREATE CONSTRAINT lesson_id IF NOT EXISTS FOR (n:Lesson) REQUIRE n.lesson_id IS UNIQUE",
-            "CREATE CONSTRAINT chunk_id IF NOT EXISTS FOR (n:Chunk) REQUIRE n.chunk_id IS UNIQUE",
-            "CREATE CONSTRAINT keyword_key IF NOT EXISTS FOR (n:Keyword) REQUIRE n.keyword_key IS UNIQUE",
+            "CREATE CONSTRAINT thing_id_unique IF NOT EXISTS FOR (n:Thing) REQUIRE n.id IS UNIQUE",
+            "CREATE CONSTRAINT class_id_unique IF NOT EXISTS FOR (n:Class) REQUIRE n.class_id IS UNIQUE",
+            "CREATE CONSTRAINT subject_id_unique IF NOT EXISTS FOR (n:Subject) REQUIRE n.subject_id IS UNIQUE",
+            "CREATE CONSTRAINT topic_id_unique IF NOT EXISTS FOR (n:Topic) REQUIRE n.topic_id IS UNIQUE",
+            "CREATE CONSTRAINT lesson_id_unique IF NOT EXISTS FOR (n:Lesson) REQUIRE n.lesson_id IS UNIQUE",
+            "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (n:Chunk) REQUIRE n.chunk_id IS UNIQUE",
+            "CREATE CONSTRAINT keyword_key_unique IF NOT EXISTS FOR (n:Keyword) REQUIRE n.keyword_key IS UNIQUE",
         ]
         for statement in statements:
             session.run(statement).consume()
@@ -85,21 +85,20 @@ def _ensure_root(session: Session) -> None:
     ).consume()
 
 
+
 def upsert_class(session: Session, row: dict[str, Any]) -> None:
     _ensure_root(session)
     session.run(
         """
         MERGE (c:Class {class_id: $class_id})
-        SET c.class_name = $class_name,
-            c.mongo_id = $mongo_id,
-            c.import_key = $import_key,
-            c.updated_at = datetime()
+        SET c.class_name = $class_name
         WITH c
         MATCH (root:Thing {id: $root_id})
         MERGE (root)-[:HAS_CLASS]->(c)
         """,
         root_id=ROOT_THING_ID,
-        **row,
+        class_id=row.get("class_id"),
+        class_name=row.get("class_name"),
     ).consume()
 
 
@@ -108,18 +107,16 @@ def upsert_subject(session: Session, row: dict[str, Any]) -> None:
         """
         MERGE (c:Class {class_id: $class_id})
         MERGE (s:Subject {subject_id: $subject_id})
-        SET s.subject_name = $subject_name,
-            s.subject_type = $subject_type,
-            s.mongo_id = $mongo_id,
-            s.import_key = $import_key,
-            s.updated_at = datetime()
+        SET s.subject_name = $subject_name
         WITH c, s
         OPTIONAL MATCH (old:Class)-[r:HAS_SUBJECT]->(s)
         WHERE old.class_id <> $class_id
         DELETE r
         MERGE (c)-[:HAS_SUBJECT]->(s)
         """,
-        **row,
+        class_id=row.get("class_id"),
+        subject_id=row.get("subject_id"),
+        subject_name=row.get("subject_name"),
     ).consume()
 
 
@@ -130,19 +127,18 @@ def upsert_topic(session: Session, row: dict[str, Any]) -> None:
         MERGE (t:Topic {topic_id: $topic_id})
         SET t.topic_name = $topic_name,
             t.topic_num = $topic_num,
-            t.mongo_id = $mongo_id,
-            t.import_key = $import_key,
-            t.embedding_text = CASE WHEN $embedding_text IS NULL THEN t.embedding_text ELSE $embedding_text END,
-            t.embedding_model = CASE WHEN $embedding_model IS NULL THEN t.embedding_model ELSE $embedding_model END,
-            t.embedding = CASE WHEN $embedding IS NULL THEN t.embedding ELSE $embedding END,
-            t.updated_at = datetime()
+            t.embedding = CASE WHEN $embedding IS NULL THEN t.embedding ELSE $embedding END
         WITH s, t
         OPTIONAL MATCH (old:Subject)-[r:HAS_TOPIC]->(t)
         WHERE old.subject_id <> $subject_id
         DELETE r
         MERGE (s)-[:HAS_TOPIC]->(t)
         """,
-        **row,
+        subject_id=row.get("subject_id"),
+        topic_id=row.get("topic_id"),
+        topic_name=row.get("topic_name"),
+        topic_num=row.get("topic_num"),
+        embedding=row.get("embedding"),
     ).consume()
 
 
@@ -152,18 +148,17 @@ def upsert_lesson(session: Session, row: dict[str, Any]) -> None:
         MERGE (t:Topic {topic_id: $topic_id})
         MERGE (l:Lesson {lesson_id: $lesson_id})
         SET l.lesson_name = $lesson_name,
-            l.lesson_num = $lesson_num,
-            l.lesson_type = $lesson_type,
-            l.mongo_id = $mongo_id,
-            l.import_key = $import_key,
-            l.updated_at = datetime()
+            l.lesson_num = $lesson_num
         WITH t, l
         OPTIONAL MATCH (old:Topic)-[r:HAS_LESSON]->(l)
         WHERE old.topic_id <> $topic_id
         DELETE r
         MERGE (t)-[:HAS_LESSON]->(l)
         """,
-        **row,
+        topic_id=row.get("topic_id"),
+        lesson_id=row.get("lesson_id"),
+        lesson_name=row.get("lesson_name"),
+        lesson_num=row.get("lesson_num"),
     ).consume()
 
 
@@ -173,17 +168,17 @@ def upsert_chunk(session: Session, row: dict[str, Any]) -> None:
         MERGE (l:Lesson {lesson_id: $lesson_id})
         MERGE (c:Chunk {chunk_id: $chunk_id})
         SET c.chunk_name = $chunk_name,
-            c.chunk_num = $chunk_num,
-            c.mongo_id = $mongo_id,
-            c.import_key = $import_key,
-            c.updated_at = datetime()
+            c.chunk_num = $chunk_num
         WITH l, c
         OPTIONAL MATCH (old:Lesson)-[r:HAS_CHUNK]->(c)
         WHERE old.lesson_id <> $lesson_id
         DELETE r
         MERGE (l)-[:HAS_CHUNK]->(c)
         """,
-        **row,
+        lesson_id=row.get("lesson_id"),
+        chunk_id=row.get("chunk_id"),
+        chunk_name=row.get("chunk_name"),
+        chunk_num=row.get("chunk_num"),
     ).consume()
 
 
@@ -192,13 +187,11 @@ def upsert_chunk_keyword(session: Session, row: dict[str, Any]) -> None:
         """
         MERGE (c:Chunk {chunk_id: $chunk_id})
         MERGE (kw:Keyword {keyword_key: $keyword_key})
-        SET kw.keyword_id = $keyword_id,
-            kw.keyword_name = $keyword_name,
-            kw.keyword_slug = $keyword_slug,
-            kw.chunk_id = $chunk_id,
-            kw.mongo_id = $mongo_id,
-            kw.updated_at = datetime()
+        SET kw.keyword_name = $keyword_name,
+            kw.chunk_id = $chunk_id
         MERGE (c)-[:HAS_KEYWORD]->(kw)
         """,
-        **row,
+        chunk_id=row.get("chunk_id"),
+        keyword_key=row.get("keyword_key"),
+        keyword_name=row.get("keyword_name"),
     ).consume()
